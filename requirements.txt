@@ -1,0 +1,62 @@
+# Core dependencies
+python-dotenv
+openai
+langchain
+langgraph
+langchain-openai
+langchain-community
+langchain-experimental
+langchain-core
+transformers
+torch
+accelerate
+bitsandbytes
+anthropic
+google-search-results
+duckduckgo-search
+beautifulsoup4
+selenium
+unstructured
+pypdf
+docx2txt
+python-pptx
+python-docx
+tiktoken
+chromadb
+faiss-cpu
+sentence-transformers
+llama-index
+chainlit
+streamlit
+fastapi
+uvicorn
+pydantic
+requests
+
+# Development dependencies
+pytest
+pytest-asyncio
+black
+flake8
+mypy
+
+# Production dependencies
+gunicorn
+
+# Code Analysis
+autopep8
+pylint
+radon
+
+# Testing
+pytest-cov
+pytest-mock
+pytest-benchmark
+
+# Documentation
+sphinx
+sphinx-rtd-theme
+
+# CI/CD
+pre-commit
+tox 

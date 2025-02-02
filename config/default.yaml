@@ -1,0 +1,29 @@
+agents:
+  default_model: "gpt-4-turbo-preview"
+  temperature: 0.7
+  timeout: 30.0
+  max_retries: 3
+  retry_delay: 1.0
+
+tools:
+  web_search:
+    engine: duckduckgo
+    max_results: 5
+    retry_attempts: 3
+    retry_delay: 2.0
+  content_extractor:
+    timeout: 30
+    max_content_length: 10000
+    retry_attempts: 2
+    retry_delay: 1.0
+  research_synthesizer:
+    max_key_points: 5
+    min_sentence_length: 50
+  code_analysis:
+    max_file_size: 1000000
+    supported_languages: ["python", "javascript", "typescript"]
+
+memory:
+  type: "conversation_buffer"
+  max_token_limit: 4000
+  ttl: 3600  # Time to live in seconds 
