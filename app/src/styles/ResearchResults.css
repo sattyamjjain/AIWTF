@@ -1,0 +1,21 @@
+.research-results {
+  margin-top: 2rem;
+}
+
+.research-results ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.research-results li {
+  margin-bottom: 0.5rem;
+}
+
+.research-results a {
+  color: #007bff;
+  text-decoration: none;
+}
+
+.research-results a:hover {
+  text-decoration: underline;
+} 
