@@ -17,12 +17,23 @@ class Settings(BaseSettings):
     
     # API Keys
     OPENAI_API_KEY: str
-    SERPAPI_API_KEY: str
+    BING_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+    GOOGLE_CSE_ID: str = ""
+    SERPAPI_API_KEY: str = ""
     
     # Research Settings
     MAX_RESEARCH_DEPTH: int = 3
     MAX_SOURCES: int = 10
     DEFAULT_RESEARCH_DEPTH: int = 1
+    
+    # Search API Settings
+    GOOGLE_API_KEY: str = ""
+    GOOGLE_CSE_ID: str = ""
+    
+    # Search Provider Configuration
+    DEFAULT_SEARCH_PROVIDER: str = "google"
+    MAX_SEARCH_RESULTS: int = 10
     
     model_config = ConfigDict(
         env_file=".env",

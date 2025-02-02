@@ -59,4 +59,10 @@ sphinx-rtd-theme
 
 # CI/CD
 pre-commit
-tox 
+tox
+
+# Google API
+google-api-python-client
+
+# Added from the code block
+trafilatura

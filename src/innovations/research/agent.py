@@ -7,30 +7,46 @@ import asyncio
 from datetime import datetime
 import backoff
 import logging
+from src.agents.tools.content_tools import ContentExtractor
 
 logger = logging.getLogger(__name__)
 
 class ResearchAgent(BaseInnovationAgent):
-    """Advanced research agent capable of conducting comprehensive research"""
+    """Agent for conducting research"""
     
-    def __init__(self):
-        tools = [
-            WebSearchTool(),
-            ContentExtractorTool(),
-            ResearchSynthesizerTool()
+    def __init__(self, search_provider: str = "auto", api_key: Optional[str] = None, cx: Optional[str] = None):
+        """Initialize research agent"""
+        
+        # Initialize tools
+        self.tools = [
+            WebSearchTool(provider_type=search_provider, api_key=api_key, cx=cx),
+            ContentExtractorTool()
         ]
         
-        system_prompt = """You are an advanced research agent specialized in conducting thorough research.
-        Follow these guidelines:
-        1. Break down complex topics into key aspects
-        2. Search multiple sources for each aspect
-        3. Verify information across sources
-        4. Synthesize findings into coherent insights
-        5. Cite sources for all key information
-        6. Maintain objectivity in analysis
-        """
+        system_prompt = """You are a research assistant. Your task is to:
+        1. Search for information on given topics
+        2. Extract relevant content from web pages
+        3. Synthesize findings into coherent summaries
+        Always verify information from multiple sources when possible."""
         
-        super().__init__(tools=tools, system_prompt=system_prompt)
+        super().__init__(tools=self.tools, system_prompt=system_prompt)
+    
+    async def research(self, query: str, num_results: int = 5) -> Dict[str, Any]:
+        """Conduct research on a topic"""
+        try:
+            search_tool = next(t for t in self.tools if t.name == "web_search")
+            results = search_tool._run(query=query, num_results=num_results)
+            
+            return {
+                "results": results,
+                "metadata": {
+                    "query": query,
+                    "num_results": num_results
+                }
+            }
+        except Exception as e:
+            logger.error(f"Research failed: {str(e)}")
+            raise ResearchError(f"Research failed: {str(e)}")
     
     async def __aenter__(self):
         return self
@@ -64,131 +80,222 @@ class ResearchAgent(BaseInnovationAgent):
             logger.error(f"Error identifying subtopics: {str(e)}")
             return [f"Error identifying subtopics: {str(e)}"]
     
-    async def research_topic(self, topic: str, depth: int = 2, max_sources: int = 5) -> Dict[str, Any]:
-        """Conduct comprehensive research on a topic"""
-        if not topic.strip():
-            raise ResearchError("Empty topic provided")
-            
+    async def research_topic(self, topic: str, depth: int = 1, max_sources: int = 5) -> Dict[str, Any]:
+        """Conduct research on a topic"""
         try:
-            # Initialize research state
-            state = self.get_initial_state()
-            state.metadata.update({
-                "topic": topic,
-                "depth": depth,
-                "max_sources": max_sources,
-                "start_time": datetime.now(),
-                "errors": []
-            })
+            if not topic.strip():
+                raise ValueError("Topic cannot be empty")
             
-            # Try different search variations
-            search_variations = [
-                topic,
-                f"latest news about {topic}",
-                f"recent developments in {topic}",
-                f"current information about {topic}"
+            start_time = datetime.now()
+            logger.info(f"Starting research on topic: {topic}")
+            
+            # Get search results
+            search_tool = next(t for t in self.tools if t.name == "web_search")
+            logger.info("Executing web search...")
+            search_results = search_tool._run(topic, max_sources)
+            logger.info(f"Found {len(search_results)} search results")
+            
+            # Extract content from each source
+            content_tool = next(t for t in self.tools if t.name == "content_extractor")
+            contents = []
+            errors = []
+            
+            for result in search_results[:max_sources]:
+                try:
+                    if result.get('link'):
+                        logger.info(f"Extracting content from: {result['link']}")
+                        content = await content_tool._arun(result['link'])
+                        if content and content.get('content'):
+                            contents.append({
+                                'title': result['title'],
+                                'content': content['content'],
+                                'url': result['link']
+                            })
+                            logger.info(f"Successfully extracted content from {result['link']}")
+                        else:
+                            error_msg = f"No content extracted from {result['link']}"
+                            logger.warning(error_msg)
+                            errors.append(error_msg)
+                    else:
+                        logger.warning(f"Empty link in search result: {result}")
+                except Exception as e:
+                    error_msg = f"Failed to extract content from {result.get('link', 'unknown URL')}: {str(e)}"
+                    logger.error(error_msg)
+                    errors.append(error_msg)
+            
+            # Generate comprehensive summary using LLM
+            summary = await self._synthesize_content_with_llm(contents, topic) if contents else "No relevant content found"
+            
+            # Format sources
+            sources = [
+                {"title": result["title"], "url": result.get("link", "")} 
+                for result in search_results[:max_sources]
             ]
             
-            all_results = []
-            for query in search_variations:
-                results = await self._execute_tool(
-                    "web_search",
-                    query,
-                    state
-                )
-                all_results.extend(results)
-                if len(all_results) >= max_sources:
-                    break
+            completion_time = datetime.now()
+            duration = completion_time - start_time
             
-            # Deduplicate results
-            seen_links = set()
-            unique_results = []
-            for r in all_results:
-                if r['link'] not in seen_links:
-                    seen_links.add(r['link'])
-                    unique_results.append(r)
-            
-            if not unique_results:
-                logger.warning(f"No search results found for topic: {topic}")
-                return {
-                    "topic": topic,
-                    "summary": "No relevant information found.",
-                    "key_points": ["No information available for the specified topic."],
-                    "sources": [],
-                    "metadata": {
-                        "depth": depth,
-                        "source_count": 0,
-                        "completion_time": datetime.now(),
-                        "duration": str(datetime.now() - state.metadata["start_time"]),
-                        "errors": ["No search results found"]
-                    }
-                }
-            
-            # Phase 2: Content Extraction
-            content_data = []
-            for result in unique_results[:max_sources]:
-                try:
-                    content = await self._execute_tool(
-                        "content_extractor",
-                        result['link'],
-                        state
-                    )
-                    content_data.append(content)
-                except Exception as e:
-                    state.metadata["errors"].append(f"Content extraction error: {str(e)}")
-            
-            # Phase 3: Deep Research (if depth > 1)
-            if depth > 1:
-                for content in content_data:
-                    # Extract and research subtopics
-                    subtopics = await self._identify_subtopics(content['content'])
-                    for subtopic in subtopics:
-                        sub_results = await self.research_topic(
-                            subtopic,
-                            depth=depth-1,
-                            max_sources=max_sources-2
-                        )
-                        content_data.extend(sub_results.get('findings', []))
-            
-            # Phase 4: Synthesis
-            synthesis = await self._execute_tool(
-                "research_synthesizer",
-                content_data,
-                state
-            )
-            
-            # Final Processing
-            research_output = {
+            return {
                 "topic": topic,
-                "summary": synthesis['summary'],
-                "key_findings": {
-                    "Tax and Financial Changes": synthesis['key_points']['tax_changes'],
-                    "Economic Measures": synthesis['key_points']['economic_measures'],
-                    "Social Initiatives": synthesis['key_points']['social_initiatives'],
-                    "Infrastructure Development": synthesis['key_points']['infrastructure'],
-                    "Other Important Highlights": synthesis['key_points']['other_highlights']
-                },
-                "statistics": {
-                    "Fiscal Indicators": synthesis['statistics']['fiscal'],
-                    "Budget Allocations": synthesis['statistics']['allocations'],
-                    "Targets and Goals": synthesis['statistics']['targets']
-                },
-                "sources": synthesis['sources'],
+                "summary": summary,
+                "sources": sources,
                 "metadata": {
                     "depth": depth,
-                    "source_count": len(synthesis['sources']),
-                    "completion_time": datetime.now(),
-                    "duration": str(datetime.now() - state.metadata["start_time"]),
-                    "errors": state.metadata.get("errors", [])
+                    "source_count": len(sources),
+                    "completion_time": completion_time.isoformat(),
+                    "duration": str(duration),
+                    "errors": errors
                 }
             }
             
-            return research_output
-            
         except Exception as e:
-            raise ResearchError(f"Research failed: {str(e)}")
+            logger.error(f"Research failed: {str(e)}")
+            raise ResearchError(f"Research failed: {str(e)}") from e
     
-    async def _execute_tool(self, tool_name: str, input_data: Any, state: WorkflowState) -> Any:
-        """Execute a tool and update state"""
+    async def _synthesize_content_with_llm(self, contents: List[Dict[str, str]], topic: str) -> str:
+        """Synthesize content using LLM"""
+        try:
+            # Combine all content with source attribution
+            combined_content = "\n\n".join([
+                f"Source: {c['title']}\n{c.get('content', '')[:2000]}"
+                for c in contents
+            ])
+            
+            prompt = f"""Analyze and synthesize the following content about "{topic}". 
+            Provide a clear, concise summary focusing on the main points and key announcements.
+            
+            Content:
+            {combined_content[:4000]}  # Limit total content to avoid token limits
+            
+            Provide a professional summary in 3-4 paragraphs."""
+            
+            messages = [{"role": "user", "content": prompt}]
+            response = await self.async_openai_client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Failed to synthesize content with LLM: {str(e)}")
+            return self._synthesize_content_basic(contents)
+    
+    async def _extract_key_findings_with_llm(self, contents: List[Dict[str, str]], topic: str) -> Dict[str, List[str]]:
+        """Extract key findings using LLM"""
+        try:
+            combined_content = "\n\n".join([
+                f"Source: {c['title']}\n{c.get('content', '')[:2000]}"
+                for c in contents
+            ])
+            
+            prompt = f"""Analyze the following content about "{topic}" and extract key findings in these categories:
+            - Tax changes and reforms
+            - Economic measures and policies
+            - Social initiatives and welfare programs
+            - Infrastructure development
+            - Other important highlights
+            
+            Content:
+            {combined_content[:4000]}
+            
+            Format the response as bullet points under each category."""
+            
+            messages = [{"role": "user", "content": prompt}]
+            response = await self.async_openai_client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            # Parse the response into categories
+            text = response.choices[0].message.content
+            categories = text.split('\n\n')
+            findings = {
+                "tax_changes": [],
+                "economic_measures": [],
+                "social_initiatives": [],
+                "infrastructure": [],
+                "other_highlights": []
+            }
+            
+            current_category = None
+            for line in text.split('\n'):
+                line = line.strip()
+                if line.lower().startswith('tax'):
+                    current_category = "tax_changes"
+                elif line.lower().startswith('economic'):
+                    current_category = "economic_measures"
+                elif line.lower().startswith('social'):
+                    current_category = "social_initiatives"
+                elif line.lower().startswith('infrastructure'):
+                    current_category = "infrastructure"
+                elif line.lower().startswith('other'):
+                    current_category = "other_highlights"
+                elif line.startswith('- ') and current_category:
+                    findings[current_category].append(line[2:])
+            
+            return findings
+        except Exception as e:
+            logger.error(f"Failed to extract key findings with LLM: {str(e)}")
+            return self._extract_key_findings_basic(contents)
+    
+    async def _extract_statistics_with_llm(self, contents: List[Dict[str, str]], topic: str) -> Dict[str, List[str]]:
+        """Extract statistics using LLM"""
+        try:
+            combined_content = "\n\n".join([
+                f"Source: {c['title']}\n{c.get('content', '')[:2000]}"
+                for c in contents
+            ])
+            
+            prompt = f"""Extract important statistics and numerical data from the following content about "{topic}".
+            Categorize them into:
+            - Fiscal indicators and targets
+            - Budget allocations
+            - Growth targets and projections
+            
+            Content:
+            {combined_content[:4000]}
+            
+            Format each statistic as a clear statement."""
+            
+            messages = [{"role": "user", "content": prompt}]
+            response = await self.async_openai_client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000
+            )
+            
+            # Parse the response into categories
+            text = response.choices[0].message.content
+            stats = {
+                "fiscal": [],
+                "allocations": [],
+                "targets": []
+            }
+            
+            current_category = None
+            for line in text.split('\n'):
+                line = line.strip()
+                if line.lower().startswith('fiscal'):
+                    current_category = "fiscal"
+                elif line.lower().startswith('budget') or line.lower().startswith('allocation'):
+                    current_category = "allocations"
+                elif line.lower().startswith('growth') or line.lower().startswith('target'):
+                    current_category = "targets"
+                elif line.startswith('- ') and current_category:
+                    stats[current_category].append(line[2:])
+            
+            return stats
+        except Exception as e:
+            logger.error(f"Failed to extract statistics with LLM: {str(e)}")
+            return self._extract_statistics_basic(contents)
+    
+    async def _execute_tool(self, tool_name: str, input_data: Any, state: Any) -> Any:
+        """Execute a tool and handle async properly"""
         try:
             tool = next(t for t in self.tools if t.name == tool_name)
             result = await tool._arun(input_data)
@@ -197,9 +304,8 @@ class ResearchAgent(BaseInnovationAgent):
                 "timestamp": datetime.now()
             })
             return result
-        except StopIteration:
-            raise ResearchError(f"Tool '{tool_name}' not found")
         except Exception as e:
+            logger.error(f"Tool execution failed: {str(e)}")
             raise ResearchError(f"Tool execution failed: {str(e)}")
     
     def get_initial_state(self) -> WorkflowState:
