@@ -5,8 +5,10 @@ from typing import Callable, Any
 
 logger = logging.getLogger(__name__)
 
+
 def log_execution(func: Callable) -> Callable:
     """Decorator to log function execution time and status"""
+
     @functools.wraps(func)
     async def async_wrapper(*args, **kwargs) -> Any:
         start = time()
@@ -17,9 +19,11 @@ def log_execution(func: Callable) -> Callable:
             return result
         except Exception as e:
             elapsed = time() - start
-            logger.error(f"{func.__name__} failed after {elapsed:.2f} seconds: {str(e)}")
+            logger.error(
+                f"{func.__name__} failed after {elapsed:.2f} seconds: {str(e)}"
+            )
             raise
-    
+
     @functools.wraps(func)
     def sync_wrapper(*args, **kwargs) -> Any:
         start = time()
@@ -30,7 +34,9 @@ def log_execution(func: Callable) -> Callable:
             return result
         except Exception as e:
             elapsed = time() - start
-            logger.error(f"{func.__name__} failed after {elapsed:.2f} seconds: {str(e)}")
+            logger.error(
+                f"{func.__name__} failed after {elapsed:.2f} seconds: {str(e)}"
+            )
             raise
-    
+
     return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper

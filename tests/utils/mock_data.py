@@ -5,7 +5,7 @@ MOCK_RESEARCH_REQUEST = {
     "depth": 1,
     "max_sources": 5,
     "provider": "duckduckgo",
-    "num_results": 5
+    "num_results": 5,
 }
 
 MOCK_RESEARCH_RESPONSE = {
@@ -16,24 +16,19 @@ MOCK_RESEARCH_RESPONSE = {
         "economic_measures": ["Test measure 1", "Test measure 2"],
         "social_initiatives": [],
         "infrastructure": [],
-        "other_highlights": []
+        "other_highlights": [],
     },
     "statistics": {
         "fiscal_indicators": [],
         "budget_allocations": [],
-        "targets_and_goals": []
+        "targets_and_goals": [],
     },
-    "sources": [
-        {
-            "title": "Test Source 1",
-            "url": "http://test1.com"
-        }
-    ],
+    "sources": [{"title": "Test Source 1", "url": "http://test1.com"}],
     "metadata": {
         "depth": 1,
         "source_count": 1,
         "completion_time": datetime.now().isoformat(),
         "duration": "0:00:01.234567",
-        "errors": []
-    }
-} 
+        "errors": [],
+    },
+}
