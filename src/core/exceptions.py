@@ -44,3 +44,9 @@ class ResearchError(AIWTFException):
     """Raised when there's an error in research operations"""
 
     pass
+
+
+class CodeAssistantError(AIWTFException):
+    """Raised when there's an error in code assistance operations"""
+
+    pass

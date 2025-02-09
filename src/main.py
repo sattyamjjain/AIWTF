@@ -1,14 +1,35 @@
-import asyncio
 import os
 from dotenv import load_dotenv
-from agents.base.base_innovation import BaseInnovationAgent
-from agents.tools.web_tools import WebSearchTool, WebBrowseTool
-from utils import setup_logging, Config
-from core.exceptions import ConfigurationError
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from src.agents.base.base_innovation import BaseInnovationAgent
+from src.agents.tools.research_tools import WebSearchTool
+from src.agents.tools.web_tools import WebBrowseTool
+from src.api.routes import router as api_router
+from src.utils import setup_logging, Config
+from src.core.exceptions import ConfigurationError
 
 # Initialize logging
 logger = setup_logging()
 
+# Create FastAPI app
+app = FastAPI(
+    title="AIWTF API",
+    version="1.0.0",
+    description="AI Workflow Testing Framework API"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include the API router
+app.include_router(api_router)
 
 def initialize_environment():
     """Initialize environment and configurations"""
@@ -29,6 +50,15 @@ def initialize_environment():
     except Exception as e:
         raise ConfigurationError(f"Failed to load configuration: {e}")
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize application on startup"""
+    try:
+        config = initialize_environment()
+        logger.info("Environment initialized successfully")
+    except Exception as e:
+        logger.error(f"Startup error: {e}")
+        raise
 
 async def main():
     try:
@@ -61,6 +91,6 @@ async def main():
         logger.error(f"Application error: {e}")
         raise
 
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True)
